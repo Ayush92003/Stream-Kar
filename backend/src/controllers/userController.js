@@ -62,8 +62,11 @@ export async function sendFriendRequest(req, res) {
     }
 
     // Check if the recipient is already a friend
-    const sender = await User.findById(senderId);
-    if (sender.friends.includes(recipientId)) {
+    const sender = req.user;
+    if (
+      sender.friends.includes(recipientId) ||
+      recipient.friends.includes(senderId)
+    ) {
       return res
         .status(400)
         .json({ message: "You are already friends with this user." });
@@ -82,6 +85,7 @@ export async function sendFriendRequest(req, res) {
       recipient: recipientId,
     });
     await newFriendRequest.save();
+
     res.status(200).json({ message: "Friend request sent successfully." });
   } catch (error) {
     console.log("Error in sendFriendRequest controller", error.message);
@@ -136,6 +140,8 @@ export async function acceptFriendRequest(req, res) {
     // Add the recipient to the sender's friends list
     sender.friends.push(recipientId);
     await sender.save();
+    // Remove the friend request from the database
+    await FriendRequest.deleteOne({ _id: friendRequest._id });
 
     res.status(200).json({ message: "Friend request accepted successfully." });
   } catch (error) {
@@ -149,20 +155,22 @@ export async function getFriendRequests(req, res) {
     const incomingRequest = await FriendRequest.find({
       recipient: req.user._id,
       status: "pending",
-    }).populate(
-      "sender",
-      "fullName",
-      "profilePic",
-      "nativeLanguage",
-      "learningLanguage"
-    );
-
+    })
+      .populate(
+        "sender",
+        "fullName",
+        "profilePic",
+        "nativeLanguage",
+        "learningLanguage"
+      )
+      .sort({ createdAt: -1 });
 
     const acceptedRequests = await FriendRequest.find({
       sender: req.user._id,
       status: "accepted",
-    }).populate("recipient", "fullName", "profilePic");
-
+    })
+      .populate("recipient", "fullName", "profilePic")
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       incomingRequest,
@@ -179,10 +187,12 @@ export async function getOutgoingFriendRequests(req, res) {
     const outgoingRequests = await FriendRequest.find({
       sender: req.user._id,
       status: "pending",
-    }).populate(
-      "recipient",
-      "fullName profilePic nativeLanguage learningLanguage"
-    );
+    })
+      .populate(
+        "recipient",
+        "fullName profilePic nativeLanguage learningLanguage"
+      )
+      .sort({ createdAt: -1 });
 
     res.status(200).json(outgoingRequests);
   } catch (error) {
@@ -190,4 +200,3 @@ export async function getOutgoingFriendRequests(req, res) {
     return res.status(500).json({ message: "Internal server error" });
   }
 }
-
